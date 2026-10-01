@@ -69,6 +69,14 @@ export function writableFolders(): string[] {
   return list("VAULT_WRITABLE_FOLDERS").map((f) => f.replace(/^\/+|\/+$/g, ""));
 }
 
+/**
+ * Folders that are readable but never writable, e.g. folders whose notes a plugin
+ * executes as code (Excalidraw scripts, Templater templates).
+ */
+export function readOnlyFolders(): string[] {
+  return list("VAULT_READONLY_FOLDERS").map((f) => f.replace(/^\/+|\/+$/g, ""));
+}
+
 export function proposalTtlSeconds(): number {
   return Number(process.env.PROPOSAL_TTL_SECONDS ?? 7 * 24 * 3600);
 }

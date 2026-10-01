@@ -14,6 +14,8 @@ export interface VaultOptions {
   hidden: string[];
   /** Vault-relative folders proposals may target; empty = all visible folders. */
   writable: string[];
+  /** Vault-relative folders that are readable but never writable (e.g. plugin script folders). */
+  readOnly?: string[];
 }
 
 export class VaultError extends Error {}
@@ -59,6 +61,7 @@ function isHidden(rel: string, opts: VaultOptions): boolean {
 }
 
 function isWritable(rel: string, opts: VaultOptions): boolean {
+  if ((opts.readOnly ?? []).some((r) => r !== "" && within(rel, r))) return false;
   if (opts.writable.length === 0) return true;
   return opts.writable.some((w) => within(rel, w === "." ? "" : w));
 }
@@ -103,7 +106,11 @@ export async function resolveForWrite(input: string, opts: VaultOptions) {
   if (!rel) throw new VaultError("path is empty");
   if (isHidden(rel, opts)) throw new VaultError("this folder is not accessible");
   if (!isWritable(rel, opts)) {
-    throw new VaultError(`writes are only allowed in: ${opts.writable.join(", ")}`);
+    throw new VaultError(
+      opts.writable.length
+        ? `writes are only allowed in: ${opts.writable.join(", ")} (and never in: ${(opts.readOnly ?? []).join(", ")})`
+        : `this folder is read-only: writes are never allowed in ${(opts.readOnly ?? []).join(", ")}`,
+    );
   }
   checkExt(rel, WRITE_EXT, "writing");
   const root = await realRoot(opts);
