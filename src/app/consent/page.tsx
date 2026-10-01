@@ -1,0 +1,81 @@
+import { Shell, Guard } from "@/components/Shell";
+import { getViewer } from "@/lib/auth/clerk";
+import { validateAuthorizeParams } from "@/lib/auth/authorize";
+import { signConsent } from "@/lib/auth/oauth";
+
+export const dynamic = "force-dynamic";
+
+export default async function ConsentPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const get = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
+  const viewer = await getViewer();
+  const v = await validateAuthorizeParams(get);
+
+  return (
+    <Shell>
+      <div className="container-narrow">
+        <Guard viewer={viewer}>
+          {!v.ok ? (
+            <div className="alert alert-error">Ungültige Anfrage: {v.error}</div>
+          ) : (
+            <div className="card stack">
+              <h2>Zugriff auf deinen Vault erlauben?</h2>
+              <p>
+                <strong>{v.params.clientName ?? "Unbenannter Client"}</strong> möchte auf deinen Obsidian-Vault
+                zugreifen.
+              </p>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Rückleitung an: <code>{new URL(v.params.redirectUri).origin}</code>
+                <br />
+                Client-ID: <code>{v.params.clientId}</code>
+              </p>
+              <div className="alert alert-warning" style={{ fontSize: 13 }}>
+                Nur erlauben, wenn du diese Verbindung gerade selbst gestartet hast.
+              </div>
+              <form method="post" action="/api/oauth/authorize" className="stack">
+                {[
+                  ["client_id", v.params.clientId],
+                  ["redirect_uri", v.params.redirectUri],
+                  ["code_challenge", v.params.codeChallenge],
+                  ["code_challenge_method", "S256"],
+                  ["response_type", "code"],
+                  ["state", v.params.state],
+                  ["scope", v.params.scope ?? ""],
+                ].map(([name, value]) => (
+                  <input key={name} type="hidden" name={name} value={value} />
+                ))}
+                {viewer.state === "ok" && (
+                  <input
+                    type="hidden"
+                    name="consent_token"
+                    value={signConsent({
+                      userId: viewer.userId,
+                      clientId: v.params.clientId,
+                      redirectUri: v.params.redirectUri,
+                      codeChallenge: v.params.codeChallenge,
+                    })}
+                  />
+                )}
+                <label className="checkbox-row">
+                  <input type="checkbox" checked disabled /> Notizen lesen und durchsuchen
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" name="allow_propose" defaultChecked /> Änderungen vorschlagen (jede
+                  einzelne muss hier freigegeben werden)
+                </label>
+                <div className="row">
+                  <button className="btn btn-primary" name="decision" value="allow">Erlauben</button>
+                  <button className="btn" name="decision" value="deny">Ablehnen</button>
+                </div>
+              </form>
+            </div>
+          )}
+        </Guard>
+      </div>
+    </Shell>
+  );
+}
