@@ -1,12 +1,12 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { proposals, type Proposal } from "@/lib/db/schema";
-import { appBaseUrl, hiddenFolders, ntfyUrl, proposalTtlSeconds, vaultRoot, writableFolders } from "@/lib/config";
+import { appBaseUrl, hiddenFolders, ntfyUrl, proposalTtlSeconds, readOnlyFolders, vaultRoot, writableFolders } from "@/lib/config";
 import { applyChange, prepareChange, type ChangeRequest, type VaultOptions } from "@/lib/vault";
 import { audit } from "@/lib/audit";
 
 export function vaultOptions(): VaultOptions {
-  return { root: vaultRoot(), hidden: hiddenFolders(), writable: writableFolders() };
+  return { root: vaultRoot(), hidden: hiddenFolders(), writable: writableFolders(), readOnly: readOnlyFolders() };
 }
 
 export async function createProposal(

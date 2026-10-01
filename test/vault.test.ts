@@ -151,3 +151,23 @@ test("writes through a symlinked folder are refused", async () => {
     await f.cleanup();
   }
 });
+
+test("read-only folders (plugin scripts) can be read but never written", async () => {
+  const f = await fixture({ readOnly: ["Excalidraw/Scripts"] });
+  try {
+    await mkdir(path.join(f.root, "Excalidraw", "Scripts"), { recursive: true });
+    await writeFile(path.join(f.root, "Excalidraw", "Scripts", "s.md"), "script");
+    assert.equal((await readNote("Excalidraw/Scripts/s.md", f.opts)).content, "script");
+    await assert.rejects(
+      prepareChange({ kind: "create", path: "Excalidraw/Scripts/evil.md", content: "x" }, f.opts),
+      /read-only/,
+    );
+    await assert.rejects(
+      prepareChange({ kind: "append", path: "excalidraw/scripts/s.md", text: "x" }, f.opts),
+      /read-only/,
+    );
+    await prepareChange({ kind: "create", path: "Excalidraw/Zeichnung.md", content: "ok" }, f.opts);
+  } finally {
+    await f.cleanup();
+  }
+});
