@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateAuthorizeParams } from "@/lib/auth/authorize";
 import { getViewer, isSameOrigin } from "@/lib/auth/clerk";
-import { createAuthCode, normalizeScope, verifyConsent } from "@/lib/auth/oauth";
+import { createAuthCode, scopeForLevel, verifyConsent } from "@/lib/auth/oauth";
 import { appBaseUrl } from "@/lib/config";
 import { audit } from "@/lib/audit";
 
@@ -47,7 +47,8 @@ export async function POST(req: Request) {
     return NextResponse.redirect(redirect.toString(), 303);
   }
 
-  const scope = normalizeScope(p.scope, get("allow_propose") === "on");
+  const access = get("access");
+  const scope = scopeForLevel(access === "write" || access === "propose" ? access : "read");
   const code = await createAuthCode({
     clientId: p.clientId,
     userId: viewer.userId,

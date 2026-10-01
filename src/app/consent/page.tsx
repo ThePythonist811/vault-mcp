@@ -60,12 +60,17 @@ export default async function ConsentPage({
                     })}
                   />
                 )}
+                <strong>Berechtigung für diese Verbindung</strong>
                 <label className="checkbox-row">
-                  <input type="checkbox" checked disabled /> Notizen lesen und durchsuchen
+                  <input type="radio" name="access" value="read" /> Nur lesen und durchsuchen
                 </label>
                 <label className="checkbox-row">
-                  <input type="checkbox" name="allow_propose" defaultChecked /> Änderungen vorschlagen (jede
-                  einzelne muss hier freigegeben werden)
+                  <input type="radio" name="access" value="propose" /> Lesen + Änderungen vorschlagen (jede muss
+                  einzeln freigegeben werden)
+                </label>
+                <label className="checkbox-row">
+                  <input type="radio" name="access" value="write" defaultChecked /> Lesen + direkt schreiben
+                  (anlegen, ändern, verschieben, in den Papierkorb löschen; alles wird protokolliert)
                 </label>
                 <div className="row">
                   <button className="btn btn-primary" name="decision" value="allow">Erlauben</button>

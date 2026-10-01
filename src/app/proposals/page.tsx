@@ -10,6 +10,8 @@ const KIND: Record<Proposal["kind"], string> = {
   replace: "Komplett ersetzen",
   edit: "Bearbeiten",
   append: "Anhängen",
+  delete: "Gelöscht (Papierkorb)",
+  move: "Verschoben",
 };
 
 const STATUS: Record<Proposal["status"], string> = {
@@ -82,6 +84,7 @@ export default async function ProposalsPage() {
       <Guard viewer={viewer}>
         <div className="stack-lg stack">
           <h2>Offene Vorschläge ({pending.length})</h2>
+          <p className="muted" style={{ fontSize: 13 }}>Unten im Verlauf stehen auch alle Änderungen, die Claude mit Schreibrecht direkt vorgenommen hat.</p>
           {pending.length === 0 && <p className="muted">Nichts offen.</p>}
           {pending.map((p) => <ProposalCard key={p.id} p={p} />)}
           {done.length > 0 && <h3>Verlauf</h3>}

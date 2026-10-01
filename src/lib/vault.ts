@@ -21,7 +21,7 @@ export interface VaultOptions {
 export class VaultError extends Error {}
 
 const READ_EXT = new Set([".md", ".canvas", ".txt"]);
-const WRITE_EXT = new Set([".md"]);
+const WRITE_EXT = new Set([".md", ".canvas", ".txt"]);
 const MAX_READ_BYTES = 1_000_000;
 const MAX_WRITE_BYTES = 500_000;
 /** Temp files for atomic writes; listed in .stglobalignore so Syncthing skips them. */
@@ -280,7 +280,7 @@ export type ChangeRequest =
   | { kind: "append"; path: string; text: string };
 
 export interface PreparedChange {
-  kind: ChangeRequest["kind"];
+  kind: ChangeRequest["kind"] | "delete" | "move";
   path: string;
   baseHash: string | null;
   newContent: string;
@@ -381,4 +381,71 @@ export async function applyChange(
     throw e;
   }
   return sha256(p.newContent);
+}
+
+// --- Direct writes (scope vault:write) ----------------------------------------------
+
+/** Prepares and applies a change in one step; optional expectedHash guards against lost updates. */
+export async function writeChange(
+  req: ChangeRequest,
+  opts: VaultOptions,
+  expectedHash?: string,
+): Promise<PreparedChange> {
+  const prepared = await prepareChange(req, opts);
+  if (expectedHash && prepared.baseHash !== expectedHash) {
+    throw new VaultError("the note changed since you read it (sha256 mismatch); read it again");
+  }
+  await applyChange(prepared, opts);
+  return prepared;
+}
+
+/**
+ * "Deletes" a note by moving it into Obsidian's own .trash folder, so it can be
+ * restored from Obsidian (and the Pi keeps Syncthing versions on top).
+ */
+export async function trashNote(input: string, opts: VaultOptions, expectedHash?: string): Promise<PreparedChange> {
+  const { rel, abs, root } = await resolveForWrite(input, opts);
+  const cur = await currentHash(abs);
+  if (cur.hash === null || cur.content === null) throw new VaultError("not found");
+  if (expectedHash && cur.hash !== expectedHash) {
+    throw new VaultError("the note changed since you read it (sha256 mismatch); read it again");
+  }
+  const trashRel = `.trash/${rel}`;
+  let target = path.join(root, trashRel);
+  if (await lstat(target).catch(() => null)) {
+    const ext = path.extname(target);
+    target = `${target.slice(0, -ext.length)} ${new Date().toISOString().replace(/[:.]/g, "-")}${ext}`;
+  }
+  await mkdir(path.dirname(target), { recursive: true });
+  await assertInside(path.dirname(target), root);
+  await rename(abs, target);
+  return {
+    kind: "delete",
+    path: rel,
+    baseHash: cur.hash,
+    newContent: "",
+    diff: createTwoFilesPatch(`a/${rel}`, "/dev/null", cur.content, "", "", "", { context: 3 }),
+  };
+}
+
+/** Moves/renames a note. The target must not exist. Wikilinks in other notes are not rewritten. */
+export async function moveNote(from: string, to: string, opts: VaultOptions): Promise<PreparedChange> {
+  const src = await resolveForWrite(from, opts);
+  const dst = await resolveForWrite(to, opts);
+  if (path.extname(src.rel).toLowerCase() !== path.extname(dst.rel).toLowerCase()) {
+    throw new VaultError("moving must keep the file extension");
+  }
+  const cur = await currentHash(src.abs);
+  if (cur.hash === null) throw new VaultError("not found");
+  if (await lstat(dst.abs).catch(() => null)) throw new VaultError("target already exists");
+  await mkdir(path.dirname(dst.abs), { recursive: true });
+  await assertInside(path.dirname(dst.abs), dst.root);
+  await rename(src.abs, dst.abs);
+  return {
+    kind: "move",
+    path: `${src.rel} → ${dst.rel}`,
+    baseHash: cur.hash,
+    newContent: "",
+    diff: `renamed: ${src.rel}\n     to: ${dst.rel}\n`,
+  };
 }
