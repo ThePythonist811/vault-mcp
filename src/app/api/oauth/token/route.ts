@@ -31,10 +31,14 @@ function parseBasicAuth(req: Request): { clientId: string; clientSecret: string 
   const decoded = Buffer.from(h.slice(6), "base64").toString("utf8");
   const idx = decoded.indexOf(":");
   if (idx < 0) return null;
-  return {
-    clientId: decodeURIComponent(decoded.slice(0, idx)),
-    clientSecret: decodeURIComponent(decoded.slice(idx + 1)),
-  };
+  try {
+    return {
+      clientId: decodeURIComponent(decoded.slice(0, idx)),
+      clientSecret: decodeURIComponent(decoded.slice(idx + 1)),
+    };
+  } catch {
+    return null; // malformed percent-encoding
+  }
 }
 
 async function authenticateClient(req: Request, body: Record<string, string>) {
