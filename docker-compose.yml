@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vault
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: vault
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once when the data volume is first created.
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vault -d vault"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No published port: only the app container can reach the database.
+    networks: [internal]
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://vault:${POSTGRES_PASSWORD}@postgres:5432/vault
+      VAULT_ROOT: /vault
+    # Same UID/GID as the Syncthing user on the host so written files belong to it.
+    user: "${VAULT_UID:-1000}:${VAULT_GID:-1000}"
+    volumes:
+      - ${VAULT_HOST_PATH:?set VAULT_HOST_PATH in .env}:/vault
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Only reachable from the Pi itself; Tailscale Funnel proxies to it.
+    ports:
+      - "127.0.0.1:17484:3000"
+    networks: [internal, egress]
+
+networks:
+  internal:
+    internal: true
+  egress: {}
+
+volumes:
+  pgdata:
