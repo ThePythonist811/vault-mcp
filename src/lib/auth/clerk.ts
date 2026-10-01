@@ -46,6 +46,8 @@ export async function clerkIdForUser(userId: string): Promise<string | null> {
 /** Same-origin check for state-changing form posts (defence in depth next to SameSite cookies). */
 export function isSameOrigin(req: Request, baseUrl: string): boolean {
   const origin = req.headers.get("origin");
-  if (!origin) return false;
-  return origin === new URL(baseUrl).origin;
+  if (origin && origin !== "null") return origin === new URL(baseUrl).origin;
+  // Browsers may send `Origin: null` (privacy settings, referrer policy); the
+  // browser-controlled Sec-Fetch-Site header cannot be set by page scripts.
+  return req.headers.get("sec-fetch-site") === "same-origin";
 }
