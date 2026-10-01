@@ -1,9 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
-import { appBaseUrl, writableFolders } from "@/lib/config";
-import { hasScope, SCOPE_PROPOSE } from "@/lib/auth/oauth";
-import { createProposal, getProposal, listProposals, vaultOptions } from "@/lib/proposals";
+import { appBaseUrl, readOnlyFolders, writableFolders } from "@/lib/config";
+import { hasScope, SCOPE_PROPOSE, SCOPE_WRITE } from "@/lib/auth/oauth";
+import { createProposal, getProposal, listProposals, recordDirectWrite, vaultOptions } from "@/lib/proposals";
 import {
   backlinks,
   listFolders,
@@ -12,6 +12,10 @@ import {
   recentNotes,
   searchNotes,
   VaultError,
+  moveNote,
+  trashNote,
+  writeChange,
+  type PreparedChange,
   type ChangeRequest,
 } from "@/lib/vault";
 
@@ -37,6 +41,9 @@ const READ = { readOnlyHint: true, openWorldHint: false } as const;
 // Proposals do not modify the vault by themselves, but they are not read-only either.
 const PROPOSE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 
+// Direct writes change the vault, but nothing is lost for good (trash + versions on the Pi).
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+
 const notePath = z
   .string()
   .min(1)
@@ -49,8 +56,10 @@ const reason = z
   .describe("Short explanation for the human reviewer: what changes and why");
 
 export function buildMcpServer(ctx: McpContext): McpServer {
-  const canPropose = hasScope(ctx.scope, SCOPE_PROPOSE);
+  const canWrite = hasScope(ctx.scope, SCOPE_WRITE);
+  const canPropose = !canWrite && hasScope(ctx.scope, SCOPE_PROPOSE);
   const writable = writableFolders();
+  const readOnly = readOnlyFolders();
   const server = new McpServer(
     { name: "vault-mcp", version: "0.1.0" },
     {
@@ -58,7 +67,15 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       instructions:
         "Access to the user's Obsidian vault (Markdown notes, [[wikilinks]], YAML frontmatter). " +
         "Paths are vault-relative and include the extension. Start with vault_overview or search_notes.\n\n" +
-        (canPropose
+        (canWrite
+          ? "WRITING — You have direct write access. Changes take effect immediately and sync to all of the " +
+            "user's devices within seconds; every change is logged with a diff. Always read a note before changing " +
+            "it and pass its sha256 as expected_sha256 so you never overwrite edits made on another device. Prefer " +
+            "edit_note / append_to_note over write_note for existing notes, keep the user's formatting and language, " +
+            "and tell the user what you changed. delete_note moves the note to Obsidian's trash. move_note does not " +
+            "update [[wikilinks]] in other notes. Hidden folders (starting with '.') cannot be written." +
+            (readOnly.length ? ` These folders are read-only: ${readOnly.join(", ")}.` : "")
+          : canPropose
           ? "WRITING — You cannot change the vault directly. propose_* tools create a change proposal that " +
             "the user reviews and approves at " + `${appBaseUrl()}/proposals` + ". Nothing is written until approved. " +
             "Prefer propose_edit_note / propose_append_to_note over replacing whole notes. Always read a note before " +
@@ -169,7 +186,105 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     async ({ path }) => run("get_backlinks", path, async () => ({ backlinks: await backlinks(path, vaultOptions()) })),
   );
 
+  if (canWrite) {
+    registerWriteTools();
+    return server;
+  }
   if (!canPropose) return server;
+
+  // --- Direct writes (scope vault:write) -----------------------------------------------
+
+  function registerWriteTools() {
+    const expected = z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional()
+      .describe("sha256 from read_note; the write fails if the note changed since then");
+    const note = z.string().max(300).optional().describe("Optional short note for the change log");
+
+    async function write(tool: string, auditPath: string, why: string | undefined, fn: () => Promise<PreparedChange>) {
+      return run(tool, auditPath, async () => {
+        const change = await fn();
+        const rec = await recordDirectWrite(change, why ?? tool, { id: ctx.clientId, name: ctx.clientName });
+        return { ok: true, kind: change.kind, path: change.path, change_id: rec.id, diff: change.diff };
+      });
+    }
+
+    server.registerTool(
+      "write_note",
+      {
+        title: "Create or overwrite note",
+        description:
+          "Create a note, or replace the whole content of an existing one. For existing notes prefer edit_note and pass expected_sha256.",
+        inputSchema: { path: notePath, content: z.string().max(400_000), expected_sha256: expected, change_note: note },
+        annotations: WRITE,
+      },
+      async ({ path, content, expected_sha256, change_note }) =>
+        write("write_note", path, change_note, async () => {
+          const exists = await readNote(path, vaultOptions()).then(() => true, () => false);
+          return writeChange({ kind: exists ? "replace" : "create", path, content }, vaultOptions(), expected_sha256);
+        }),
+    );
+
+    server.registerTool(
+      "edit_note",
+      {
+        title: "Edit note",
+        description:
+          "Exact search-and-replace edits in an existing note. Each old_text must occur exactly once; edits are applied in order.",
+        inputSchema: {
+          path: notePath,
+          edits: z
+            .array(z.object({ old_text: z.string().min(1).max(50_000), new_text: z.string().max(50_000) }))
+            .min(1)
+            .max(50),
+          expected_sha256: expected,
+          change_note: note,
+        },
+        annotations: WRITE,
+      },
+      async ({ path, edits, expected_sha256, change_note }) =>
+        write("edit_note", path, change_note, () =>
+          writeChange({ kind: "edit", path, edits }, vaultOptions(), expected_sha256),
+        ),
+    );
+
+    server.registerTool(
+      "append_to_note",
+      {
+        title: "Append to note",
+        description: "Append text to the end of an existing note (a newline is inserted if needed).",
+        inputSchema: { path: notePath, text: z.string().min(1).max(100_000), change_note: note },
+        annotations: WRITE,
+      },
+      async ({ path, text, change_note }) =>
+        write("append_to_note", path, change_note, () => writeChange({ kind: "append", path, text }, vaultOptions())),
+    );
+
+    server.registerTool(
+      "delete_note",
+      {
+        title: "Delete note (to trash)",
+        description: "Move a note to Obsidian's .trash folder. It can be restored from there.",
+        inputSchema: { path: notePath, expected_sha256: expected, change_note: note },
+        annotations: { ...WRITE, destructiveHint: true },
+      },
+      async ({ path, expected_sha256, change_note }) =>
+        write("delete_note", path, change_note, () => trashNote(path, vaultOptions(), expected_sha256)),
+    );
+
+    server.registerTool(
+      "move_note",
+      {
+        title: "Move or rename note",
+        description: "Move or rename a note. The target must not exist. Does not rewrite [[wikilinks]] in other notes.",
+        inputSchema: { from: notePath, to: notePath, change_note: note },
+        annotations: WRITE,
+      },
+      async ({ from, to, change_note }) =>
+        write("move_note", `${from} → ${to}`, change_note, () => moveNote(from, to, vaultOptions())),
+    );
+  }
 
   // --- Proposals (nothing is written until the user approves) -------------------------
 

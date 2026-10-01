@@ -7,6 +7,9 @@ import {
   applyChange,
   backlinks,
   listNotes,
+  moveNote,
+  trashNote,
+  writeChange,
   normalizeRel,
   prepareChange,
   readNote,
@@ -167,6 +170,62 @@ test("read-only folders (plugin scripts) can be read but never written", async (
       /read-only/,
     );
     await prepareChange({ kind: "create", path: "Excalidraw/Zeichnung.md", content: "ok" }, f.opts);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("direct write honours expected_sha256", async () => {
+  const f = await fixture();
+  try {
+    const { sha256: h } = await readNote("Notizen/B.md", f.opts);
+    await writeChange({ kind: "append", path: "Notizen/B.md", text: "neu" }, f.opts, h);
+    assert.equal(await readFile(path.join(f.root, "Notizen/B.md"), "utf8"), "# B\nHallo Welt\nneu");
+    // Old hash is now stale: the write must be refused.
+    await assert.rejects(
+      writeChange({ kind: "append", path: "Notizen/B.md", text: "x" }, f.opts, h),
+      /changed since you read it/,
+    );
+    // .canvas is writable now, scripts or other types are not.
+    await writeChange({ kind: "create", path: "Notizen/Board.canvas", content: "{}" }, f.opts);
+    await assert.rejects(writeChange({ kind: "create", path: "Notizen/x.js", content: "x" }, f.opts), /only allowed for/);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("delete moves to Obsidian trash, never outside the vault", async () => {
+  const f = await fixture({ readOnly: ["Notizen/Fest"] });
+  try {
+    await trashNote("Notizen/B.md", f.opts);
+    assert.equal(await readFile(path.join(f.root, ".trash/Notizen/B.md"), "utf8"), "# B\nHallo Welt\n");
+    await assert.rejects(readNote("Notizen/B.md", f.opts), /not found/);
+    // Same name again: kept side by side, nothing overwritten in the trash.
+    await writeFile(path.join(f.root, "Notizen/B.md"), "zweite");
+    await trashNote("Notizen/B.md", f.opts);
+    const { readdir } = await import("node:fs/promises");
+    assert.equal((await readdir(path.join(f.root, ".trash/Notizen"))).length, 2);
+    await assert.rejects(trashNote(".obsidian/app.json", f.opts), VaultError);
+    await assert.rejects(trashNote("Privat/Geheim.md", f.opts), VaultError);
+    await mkdir(path.join(f.root, "Notizen/Fest"), { recursive: true });
+    await writeFile(path.join(f.root, "Notizen/Fest/s.md"), "s");
+    await assert.rejects(trashNote("Notizen/Fest/s.md", f.opts), /read-only/);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("move: no overwrite, same extension, policies on both ends", async () => {
+  const f = await fixture({ readOnly: ["Skripte"] });
+  try {
+    await moveNote("Notizen/A.md", "Archiv/A-alt.md", f.opts);
+    assert.match(await readFile(path.join(f.root, "Archiv/A-alt.md"), "utf8"), /^# A/);
+    await assert.rejects(moveNote("Notizen/B.md", "Archiv/A-alt.md", f.opts), /already exists/);
+    await assert.rejects(moveNote("Notizen/B.md", "Notizen/B.txt", f.opts), /extension/);
+    await assert.rejects(moveNote("Notizen/B.md", "Privat/B.md", f.opts), VaultError);
+    await assert.rejects(moveNote("Notizen/B.md", ".obsidian/B.md", f.opts), VaultError);
+    await assert.rejects(moveNote("Notizen/B.md", "Skripte/B.md", f.opts), /read-only/);
+    await assert.rejects(moveNote("Notizen/B.md", "../B.md", f.opts), VaultError);
   } finally {
     await f.cleanup();
   }

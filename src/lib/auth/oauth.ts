@@ -9,7 +9,10 @@ const MAX_CLIENTS = 100;
 
 export const SCOPE_READ = "vault:read";
 export const SCOPE_PROPOSE = "vault:propose";
-export const SUPPORTED_SCOPES = [SCOPE_READ, SCOPE_PROPOSE];
+export const SCOPE_WRITE = "vault:write";
+export const SUPPORTED_SCOPES = [SCOPE_READ, SCOPE_PROPOSE, SCOPE_WRITE];
+
+export type AccessLevel = "read" | "propose" | "write";
 
 export function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
@@ -31,12 +34,14 @@ export function verifyPkce(verifier: string, challenge: string, method: string):
   return safeEqual(digest, challenge);
 }
 
-/** Keeps only scopes we know; always includes read. */
-export function normalizeScope(requested: string | null | undefined, allowPropose: boolean): string {
-  const asked = new Set((requested ?? "").split(/\s+/).filter(Boolean));
-  const out = [SCOPE_READ];
-  if (allowPropose && (asked.size === 0 || asked.has(SCOPE_PROPOSE))) out.push(SCOPE_PROPOSE);
-  return out.join(" ");
+/**
+ * The granted scope is what the user picked on the consent page; read is always included.
+ * The client's requested scope is not trusted to widen it.
+ */
+export function scopeForLevel(level: AccessLevel): string {
+  if (level === "write") return `${SCOPE_READ} ${SCOPE_WRITE}`;
+  if (level === "propose") return `${SCOPE_READ} ${SCOPE_PROPOSE}`;
+  return SCOPE_READ;
 }
 
 export function hasScope(scope: string, wanted: string): boolean {

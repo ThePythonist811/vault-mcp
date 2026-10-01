@@ -2,7 +2,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { proposals, type Proposal } from "@/lib/db/schema";
 import { appBaseUrl, hiddenFolders, ntfyUrl, proposalTtlSeconds, readOnlyFolders, vaultRoot, writableFolders } from "@/lib/config";
-import { applyChange, prepareChange, type ChangeRequest, type VaultOptions } from "@/lib/vault";
+import { applyChange, prepareChange, type ChangeRequest, type PreparedChange, type VaultOptions } from "@/lib/vault";
 import { audit } from "@/lib/audit";
 
 export function vaultOptions(): VaultOptions {
@@ -30,6 +30,31 @@ export async function createProposal(
     })
     .returning();
   void notifyNewProposal(row);
+  return row;
+}
+
+/** Records a direct write (scope vault:write) in the same history as approved proposals. */
+export async function recordDirectWrite(
+  change: PreparedChange,
+  reason: string,
+  client: { id: string; name: string | null },
+): Promise<Proposal> {
+  const [row] = await db
+    .insert(proposals)
+    .values({
+      kind: change.kind,
+      path: change.path,
+      baseHash: change.baseHash,
+      newContent: change.newContent,
+      diff: change.diff,
+      reason: reason.slice(0, 1000),
+      clientId: client.id,
+      clientName: client.name,
+      status: "applied",
+      expiresAt: new Date(),
+      decidedAt: new Date(),
+    })
+    .returning();
   return row;
 }
 

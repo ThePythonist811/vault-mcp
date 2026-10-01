@@ -51,7 +51,7 @@ export const oauthTokens = pgTable("oauth_tokens", {
 
 export const proposals = pgTable("proposals", {
   id: uuid("id").defaultRandom().primaryKey(),
-  kind: text("kind").$type<"create" | "replace" | "edit" | "append">().notNull(),
+  kind: text("kind").$type<"create" | "replace" | "edit" | "append" | "delete" | "move">().notNull(),
   path: text("path").notNull(),
   baseHash: text("base_hash"),
   newContent: text("new_content").notNull(),

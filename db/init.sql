@@ -44,10 +44,11 @@ CREATE TABLE oauth_tokens (
 CREATE INDEX oauth_tokens_refresh_token_hash_idx ON oauth_tokens (refresh_token_hash);
 CREATE INDEX oauth_tokens_user_id_idx ON oauth_tokens (user_id);
 
--- Write proposals from Claude. Nothing touches the vault until a human approves.
+-- Changes by Claude: proposals awaiting approval (status 'pending') and, for clients
+-- with the vault:write scope, direct writes recorded as already 'applied'.
 CREATE TABLE proposals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  kind text NOT NULL CHECK (kind IN ('create', 'replace', 'edit', 'append')),
+  kind text NOT NULL CHECK (kind IN ('create', 'replace', 'edit', 'append', 'delete', 'move')),
   path text NOT NULL,
   base_hash text,            -- sha256 of the file when proposed; NULL = file must not exist
   new_content text NOT NULL,
