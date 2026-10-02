@@ -61,12 +61,17 @@ services:
       ANKI_MCP_API_KEY: ${ANKI_MCP_API_KEY:?set ANKI_MCP_API_KEY in .env}
       ANKI_MCP_ALLOWED_HOSTS: anki:3141
       ANKICONNECT_BIND: 0.0.0.0
-      ANKICONNECT_API_KEY: ${ANKICONNECT_API_KEY:?set ANKICONNECT_API_KEY in .env}
-      VNCPASSWORD: ${ANKI_VNC_PASSWORD:?set ANKI_VNC_PASSWORD in .env}
+      # Second line of defence behind the gateway's own filter.
+      ANKI_MCP_DISABLED_TOOLS: create_model,model_fields,update_model_styling,update_model_templates,change_note_type,gui_add_cards,gui_browse,gui_current_card,gui_deck_browser,gui_edit_note,gui_select_card,gui_show_answer,gui_show_question,gui_undo,gui_answer_card,gui_deck_review
+    # Anki-only secrets (AnkiConnect key, VNC password) live here, not in the app's .env.
+    env_file: anki.env
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [NET_RAW, MKNOD, SYS_CHROOT, SETFCAP, AUDIT_WRITE, NET_BIND_SERVICE]
     volumes:
       - ankidata:/data
-    ports:
-      - "127.0.0.1:5901:5900"
+    # VNC is only needed for the one-time AnkiWeb login. Re-enable temporarily with
+    #   ports: ["127.0.0.1:5901:5900"]
+    # and tunnel: ssh -N -L 5901:127.0.0.1:5901 thepythonist@jarvis
     networks: [anki, anki-egress]
 
   # Own tailnet node "vault" so the server gets https://vault.<tailnet>.ts.net on port 443
@@ -95,8 +100,12 @@ networks:
   # app <-> anki only
   anki:
     internal: true
-  # anki -> AnkiWeb sync
-  anki-egress: {}
+  # anki -> AnkiWeb sync. Fixed subnet: anki/firewall/ blocks it from reaching the
+  # LAN, the tailnet and the Pi itself (the add-on's URL check can be bypassed).
+  anki-egress:
+    ipam:
+      config:
+        - subnet: 172.30.99.0/24
 
 volumes:
   pgdata:
