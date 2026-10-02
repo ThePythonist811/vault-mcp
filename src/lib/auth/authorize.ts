@@ -1,5 +1,5 @@
-import { loadClient } from "@/lib/auth/oauth";
-import { isAllowedRedirectUri } from "@/lib/config";
+import { loadClient, SCOPE_ANKI, type Target } from "@/lib/auth/oauth";
+import { appBaseUrl, isAllowedRedirectUri } from "@/lib/config";
 
 export interface AuthorizeParams {
   clientId: string;
@@ -8,6 +8,25 @@ export interface AuthorizeParams {
   codeChallenge: string;
   state: string;
   scope: string | null;
+  resource: string | null;
+  target: Target;
+}
+
+/**
+ * The client names the resource it wants (RFC 8707 `resource`, sent by Claude),
+ * falling back to the requested scope. Anything else is the vault.
+ */
+export function targetFor(resource: string | null, scope: string | null): Target {
+  if (resource) {
+    try {
+      const r = new URL(resource);
+      if (r.origin === new URL(appBaseUrl()).origin && r.pathname.replace(/\/$/, "") === "/api/anki/mcp") return "anki";
+    } catch {
+      /* not a URL: ignore */
+    }
+    return "vault";
+  }
+  return (scope ?? "").split(/\s+/).includes(SCOPE_ANKI) ? "anki" : "vault";
 }
 
 /** Validates an authorization request; used by the GET redirect, the consent page and the POST. */
@@ -35,6 +54,8 @@ export async function validateAuthorizeParams(
       codeChallenge,
       state: get("state") ?? "",
       scope: get("scope"),
+      resource: get("resource"),
+      target: targetFor(get("resource"), get("scope")),
     },
   };
 }

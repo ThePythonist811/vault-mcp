@@ -10,7 +10,13 @@ const MAX_CLIENTS = 100;
 export const SCOPE_READ = "vault:read";
 export const SCOPE_PROPOSE = "vault:propose";
 export const SCOPE_WRITE = "vault:write";
-export const SUPPORTED_SCOPES = [SCOPE_READ, SCOPE_PROPOSE, SCOPE_WRITE];
+export const SCOPE_ANKI = "anki:full";
+export const VAULT_SCOPES = [SCOPE_READ, SCOPE_PROPOSE, SCOPE_WRITE];
+export const ANKI_SCOPES = [SCOPE_ANKI];
+export const SUPPORTED_SCOPES = [...VAULT_SCOPES, ...ANKI_SCOPES];
+
+/** Which protected resource an authorization is for. Tokens never span both. */
+export type Target = "vault" | "anki";
 
 export type AccessLevel = "read" | "propose" | "write";
 
@@ -53,31 +59,25 @@ export function hasScope(scope: string, wanted: string): boolean {
 // A forged cross-site POST cannot produce it, and it cannot be replayed for
 // another client or after 10 minutes.
 
-function consentPayload(p: {
+interface ConsentFields {
   userId: string;
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  exp: number;
-}): string {
-  return [p.userId, p.clientId, p.redirectUri, p.codeChallenge, p.exp].join("\n");
+  target: Target;
 }
 
-export function signConsent(p: {
-  userId: string;
-  clientId: string;
-  redirectUri: string;
-  codeChallenge: string;
-}): string {
+function consentPayload(p: ConsentFields & { exp: number }): string {
+  return [p.userId, p.clientId, p.redirectUri, p.codeChallenge, p.target, p.exp].join("\n");
+}
+
+export function signConsent(p: ConsentFields): string {
   const exp = Math.floor(Date.now() / 1000) + 600;
   const mac = createHmac("sha256", appSecret()).update(consentPayload({ ...p, exp })).digest("base64url");
   return `${exp}.${mac}`;
 }
 
-export function verifyConsent(
-  token: string,
-  p: { userId: string; clientId: string; redirectUri: string; codeChallenge: string },
-): boolean {
+export function verifyConsent(token: string, p: ConsentFields): boolean {
   const [expStr, mac] = token.split(".");
   const exp = Number(expStr);
   if (!exp || !mac || exp < Math.floor(Date.now() / 1000)) return false;

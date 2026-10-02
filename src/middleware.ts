@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 // Machine endpoints authenticate themselves (bearer token / PKCE / client auth).
 const isPublicApi = createRouteMatcher([
   "/api/mcp(.*)",
+  "/api/anki/mcp(.*)",
   "/api/oauth/token(.*)",
   "/api/oauth/register(.*)",
   "/api/oauth/revoke(.*)",
