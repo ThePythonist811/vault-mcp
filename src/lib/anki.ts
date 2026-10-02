@@ -8,20 +8,10 @@
  * - GUI tools drive windows nobody sees.
  * Extend with ANKI_BLOCKED_TOOLS (comma-separated exact names).
  */
-const BLOCKED_PATTERNS: RegExp[] = [/model/i, /template/i, /^gui/i];
+const BLOCKED_PATTERNS: RegExp[] = [/model/i, /template/i, /note_?type/i, /^gui/i];
 
-// Read-only note type lookups are needed to create notes and are harmless.
-const ALWAYS_ALLOWED = new Set([
-  "modelNames",
-  "modelNamesAndIds",
-  "modelFieldNames",
-  "model_names",
-  "model_field_names",
-  "modelFieldsOnTemplates",
-  "modelStyling",
-  "list_models",
-  "get_model",
-]);
+// Read-only note type lookups (AnkiMCP add-on names) are needed to create notes and are harmless.
+const ALWAYS_ALLOWED = new Set(["model_names", "model_field_names", "model_styling", "model_templates"]);
 
 export function blockedToolNames(): Set<string> {
   return new Set(
