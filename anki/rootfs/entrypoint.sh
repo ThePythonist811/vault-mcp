@@ -125,12 +125,14 @@ apply_addon_config "${ANKIMCP_ID}" \
      | .http_port = ($port | tonumber)
      | .http_api_key = $key
      | .http_allowed_hosts = $hosts
-     | .http_allowed_origins = $origins' \
+     | .http_allowed_origins = $origins
+     | .disabled_tools = $disabled' \
     --arg host "${ANKI_MCP_HOST:-0.0.0.0}" \
     --arg port "${ANKI_MCP_PORT:-3141}" \
     --arg key "${ANKI_MCP_API_KEY:-}" \
     --argjson hosts "${mcp_hosts}" \
-    --argjson origins "${mcp_origins}"
+    --argjson origins "${mcp_origins}" \
+    --argjson disabled "$(csv_to_json_array "${ANKI_MCP_DISABLED_TOOLS:-}")"
 
 # The MCP addon has DNS-rebinding protection with a loopback-only allowlist.
 # Bound to 0.0.0.0 without an allowlist it answers 421 to every remote call —

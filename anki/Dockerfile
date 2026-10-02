@@ -13,7 +13,8 @@
 #   2. Addon network config is applied at runtime from the environment, so the
 #      MCP server binds beyond loopback and accepts the Unraid host header.
 #   3. Optional VNC password — upstream runs -SecurityTypes None.
-ARG X11_TAG=ghcr.io/ankimcp/headless-anki:x11-vnc-v1.5.0
+# Pinned by digest so a changed upstream tag cannot slip in unnoticed.
+ARG X11_TAG=ghcr.io/ankimcp/headless-anki:x11-vnc-v1.5.0@sha256:b7bfaab55a8f493e288c5c0265a56e041b9231a10080e94e13841ce8071316fa
 FROM ${X11_TAG}
 
 # AnkiConnect + AnkiMCP server. Space-separated AnkiWeb addon IDs.

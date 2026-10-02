@@ -1,0 +1,12 @@
+[Unit]
+Description=Restrict headless Anki container egress to the public internet
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/anki-egress-firewall.sh
+
+[Install]
+WantedBy=multi-user.target docker.service
