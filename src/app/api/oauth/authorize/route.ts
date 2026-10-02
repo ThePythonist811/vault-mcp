@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateAuthorizeParams } from "@/lib/auth/authorize";
 import { getViewer, isSameOrigin } from "@/lib/auth/clerk";
-import { createAuthCode, scopeForLevel, verifyConsent } from "@/lib/auth/oauth";
+import { createAuthCode, SCOPE_ANKI, scopeForLevel, verifyConsent } from "@/lib/auth/oauth";
 import { appBaseUrl } from "@/lib/config";
 import { audit } from "@/lib/audit";
 
@@ -35,6 +35,7 @@ export async function POST(req: Request) {
     clientId: p.clientId,
     redirectUri: p.redirectUri,
     codeChallenge: p.codeChallenge,
+    target: p.target,
   });
   if (!consentOk) return NextResponse.json({ error: "consent expired, please retry" }, { status: 400 });
 
@@ -48,7 +49,10 @@ export async function POST(req: Request) {
   }
 
   const access = get("access");
-  const scope = scopeForLevel(access === "write" || access === "propose" ? access : "read");
+  const scope =
+    p.target === "anki"
+      ? SCOPE_ANKI
+      : scopeForLevel(access === "write" || access === "propose" ? access : "read");
   const code = await createAuthCode({
     clientId: p.clientId,
     userId: viewer.userId,
@@ -59,7 +63,7 @@ export async function POST(req: Request) {
   await audit({
     actor: `user:${viewer.clerkUserId}`,
     action: "oauth.grant",
-    detail: `${p.clientName ?? p.clientId} (${p.clientId}) scope="${scope}" redirect=${new URL(p.redirectUri).host}`,
+    detail: `${p.target}: ${p.clientName ?? p.clientId} (${p.clientId}) scope="${scope}" redirect=${new URL(p.redirectUri).host}`,
     ok: true,
   });
   redirect.searchParams.set("code", code);

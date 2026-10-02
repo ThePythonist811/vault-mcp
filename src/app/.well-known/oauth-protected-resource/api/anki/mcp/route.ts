@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { appBaseUrl } from "@/lib/config";
-import { VAULT_SCOPES } from "@/lib/auth/oauth";
+import { ANKI_SCOPES } from "@/lib/auth/oauth";
 
 export const dynamic = "force-dynamic";
 
+// RFC 9728 metadata for the Anki resource (path-suffixed well-known URL).
 export async function GET() {
   const base = appBaseUrl();
   return NextResponse.json({
-    resource: `${base}/api/mcp`,
+    resource: `${base}/api/anki/mcp`,
     authorization_servers: [base],
     bearer_methods_supported: ["header"],
-    scopes_supported: VAULT_SCOPES,
+    scopes_supported: ANKI_SCOPES,
   });
 }

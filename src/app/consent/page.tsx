@@ -23,9 +23,9 @@ export default async function ConsentPage({
             <div className="alert alert-error">Ungültige Anfrage: {v.error}</div>
           ) : (
             <div className="card stack">
-              <h2>Zugriff auf deinen Vault erlauben?</h2>
+              <h2>{v.params.target === "anki" ? "Zugriff auf deine Anki-Sammlung erlauben?" : "Zugriff auf deinen Vault erlauben?"}</h2>
               <p>
-                <strong>{v.params.clientName ?? "Unbenannter Client"}</strong> möchte auf deinen Obsidian-Vault
+                <strong>{v.params.clientName ?? "Unbenannter Client"}</strong> möchte auf {v.params.target === "anki" ? "deine Anki-Sammlung" : "deinen Obsidian-Vault"}{" "}
                 zugreifen.
               </p>
               <p className="muted" style={{ fontSize: 13 }}>
@@ -45,6 +45,7 @@ export default async function ConsentPage({
                   ["response_type", "code"],
                   ["state", v.params.state],
                   ["scope", v.params.scope ?? ""],
+                  ["resource", v.params.resource ?? ""],
                 ].map(([name, value]) => (
                   <input key={name} type="hidden" name={name} value={value} />
                 ))}
@@ -57,21 +58,35 @@ export default async function ConsentPage({
                       clientId: v.params.clientId,
                       redirectUri: v.params.redirectUri,
                       codeChallenge: v.params.codeChallenge,
+                      target: v.params.target,
                     })}
                   />
                 )}
-                <strong>Berechtigung für diese Verbindung</strong>
-                <label className="checkbox-row">
-                  <input type="radio" name="access" value="read" /> Nur lesen und durchsuchen
-                </label>
-                <label className="checkbox-row">
-                  <input type="radio" name="access" value="propose" /> Lesen + Änderungen vorschlagen (jede muss
-                  einzeln freigegeben werden)
-                </label>
-                <label className="checkbox-row">
-                  <input type="radio" name="access" value="write" defaultChecked /> Lesen + direkt schreiben
-                  (anlegen, ändern, verschieben, in den Papierkorb löschen; alles wird protokolliert)
-                </label>
+                {v.params.target === "anki" ? (
+                  <>
+                    <strong>Berechtigung: Vollzugriff auf Anki</strong>
+                    <p className="muted" style={{ fontSize: 13 }}>
+                      Karten und Decks lesen, anlegen, bearbeiten und löschen, Lernsitzungen, Statistiken, Sync mit
+                      AnkiWeb. Gesperrt bleiben Kartenmodelle/Vorlagen und GUI-Steuerung. Jeder Aufruf wird
+                      protokolliert.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                  <strong>Berechtigung für diese Verbindung</strong>
+                  <label className="checkbox-row">
+                    <input type="radio" name="access" value="read" /> Nur lesen und durchsuchen
+                  </label>
+                  <label className="checkbox-row">
+                    <input type="radio" name="access" value="propose" /> Lesen + Änderungen vorschlagen (jede muss
+                    einzeln freigegeben werden)
+                  </label>
+                  <label className="checkbox-row">
+                    <input type="radio" name="access" value="write" defaultChecked /> Lesen + direkt schreiben
+                    (anlegen, ändern, verschieben, in den Papierkorb löschen; alles wird protokolliert)
+                  </label>
+                  </>
+                )}
                 <div className="row">
                   <button className="btn btn-primary" name="decision" value="allow">Erlauben</button>
                   <button className="btn" name="decision" value="deny">Ablehnen</button>

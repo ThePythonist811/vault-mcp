@@ -45,7 +45,29 @@ services:
     # Only reachable from the Pi itself; Tailscale Funnel proxies to it.
     ports:
       - "127.0.0.1:17484:3000"
-    networks: [internal, egress]
+    networks: [internal, egress, anki]
+
+  # Headless Anki (AnkiConnect + AnkiMCP add-on), syncing with AnkiWeb.
+  # Reachable only by the app (network "anki"); never published except VNC on
+  # the Pi's loopback for the one-time AnkiWeb login via SSH tunnel.
+  anki:
+    build: ./anki
+    restart: unless-stopped
+    environment:
+      PUID: ${VAULT_UID:-1000}
+      PGID: ${VAULT_GID:-1000}
+      ANKI_MCP_HOST: 0.0.0.0
+      ANKI_MCP_PORT: "3141"
+      ANKI_MCP_API_KEY: ${ANKI_MCP_API_KEY:?set ANKI_MCP_API_KEY in .env}
+      ANKI_MCP_ALLOWED_HOSTS: anki:3141
+      ANKICONNECT_BIND: 0.0.0.0
+      ANKICONNECT_API_KEY: ${ANKICONNECT_API_KEY:?set ANKICONNECT_API_KEY in .env}
+      VNCPASSWORD: ${ANKI_VNC_PASSWORD:?set ANKI_VNC_PASSWORD in .env}
+    volumes:
+      - ankidata:/data
+    ports:
+      - "127.0.0.1:5901:5900"
+    networks: [anki, anki-egress]
 
   # Own tailnet node "vault" so the server gets https://vault.<tailnet>.ts.net on port 443
   # (Claude's connector backend does not reach Funnel on 8443). Exposes only the app.
@@ -70,7 +92,13 @@ networks:
   internal:
     internal: true
   egress: {}
+  # app <-> anki only
+  anki:
+    internal: true
+  # anki -> AnkiWeb sync
+  anki-egress: {}
 
 volumes:
   pgdata:
   tsstate:
+  ankidata:
