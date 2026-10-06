@@ -1,12 +1,13 @@
 # vault-mcp
 
 Selbst gehosteter **remote MCP-Server**, der einem AI-Client (Claude, Claude Code, …)
-Lese- und kontrollierten Schreibzugriff auf meinen **Obsidian-Vault** gibt – plus einen
-Gateway zu einem **headless Anki**-Container. Läuft als Docker-Stack auf einem
-Raspberry-Pi im Heimnetz, erreichbar über eine eigene Tailscale-Node mit Funnel auf 443.
+Lese- und kontrollierten Schreibzugriff auf einen **Obsidian-Vault** gibt – plus einen
+Gateway zu einem **headless Anki**-Container. Läuft als Docker-Stack, zum Beispiel auf
+einem Raspberry Pi im Heimnetz, erreichbar über eine dedizierte Tailscale-Node mit
+Funnel auf 443.
 
 Authentifiziert über **OAuth 2.1 (PKCE)** mit **Clerk** als Identity Provider.
-Keine Notizinhalte verlassen den eigenen Server, nichts wird geloggt, was Inhalt betrifft.
+Keine Notizinhalte verlassen den Server, nichts wird geloggt, was Inhalt betrifft.
 
 ---
 
@@ -17,7 +18,7 @@ Die vorhandenen Obsidian-MCP-Server sind meist lokal, unauthentifiziert und dür
 
 | Eigenschaft | Umsetzung |
 |---|---|
-| Remote statt localhost | Eigene Tailscale-Node `vault`, Funnel auf `443` |
+| Remote statt localhost | Dedizierte Tailscale-Node `vault`, Funnel auf `443` |
 | Auth | OAuth 2.1 + PKCE, dynamische Client-Registrierung, Consent-Seite |
 | Wer darf rein | Allowlist mit Clerk-User-IDs – leer = niemand |
 | Schreiben | Standard ist **Proposal**: Vorschlag mit Diff → Mensch gibt frei |
@@ -67,9 +68,9 @@ Claude / Claude Code
 | `anki` | app ↔ anki. Nie nach außen exponiert. |
 | `anki-egress` | Festes Subnetz `172.30.99.0/24`. `anki/firewall/` blockt den Container am Zugriff auf LAN, Tailnet und den Pi selbst. |
 
-Ports: App gebunden auf `127.0.0.1:17484` (nur vom Pi aus erreichbar), DB gar nicht
-published. Extern erreichbar ausschließlich über den Tailscale-Sidecar
-(`tailscale/serve.json`, eigene Node, Funnel auf 443).
+Ports: App gebunden auf `127.0.0.1:17484` (nur lokal auf dem Host erreichbar), DB gar
+nicht published. Extern erreichbar ausschließlich über den Tailscale-Sidecar
+(`tailscale/serve.json`, dedizierte Node, Funnel auf 443).
 
 ---
 
