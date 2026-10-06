@@ -71,7 +71,7 @@ services:
       - ankidata:/data
     # VNC is only needed for the one-time AnkiWeb login. Re-enable temporarily with
     #   ports: ["127.0.0.1:5901:5900"]
-    # and tunnel: ssh -N -L 5901:127.0.0.1:5901 thepythonist@jarvis
+    # and tunnel: ssh -N -L 5901:127.0.0.1:5901 <user>@<host>
     networks: [anki, anki-egress]
 
   # Own tailnet node "vault" so the server gets https://vault.<tailnet>.ts.net on port 443
